@@ -1,3 +1,4 @@
-from .searoute import from_nodes_edges_set, searoute, setup_P, setup_M, marnet, ports
-from .classes.marnet import Marnet
-from .classes.ports import Ports
+from .main import searoute, setup_P, setup_M, from_nodes_edges_set
+from .classes import marnet, ports
+
+__all__ = ['searoute', 'setup_P', 'setup_M', 'from_nodes_edges_set', 'marnet', 'ports']

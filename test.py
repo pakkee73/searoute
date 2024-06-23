@@ -1,18 +1,22 @@
-import searoute as sr
+ports_data = {
+    "Los Angeles": {"lat": 33.716667, "lon": -118.283333},
+    "Shanghai": {"lat": 31.230416, "lon": 121.473701},
+    "Rotterdam": {"lat": 51.9225, "lon": 4.47917},
+    "Klaipeda": {"lat": 55.703557, "lon": 21.126023}
+    # 더 많은 항구 데이터를 추가할 수 있습니다.
+}
 
-#Define origin and destination points:
-origin = [21.1545, 55.6526]
-destination = [-118.2629, 33.7276]
+def get_port_coordinates(port_name):
+    port = ports_data.get(port_name)
+    if port:
+        return [port["lon"], port["lat"]]
+    else:
+        raise ValueError(f"Port '{port_name}' not found in the database")
 
+# 예제 사용법
+origin_port = "Klaipeda"
+destination_port = "Los Angeles"
+origin = get_port_coordinates(origin_port)
+destination = get_port_coordinates(destination_port)
 
-route = sr.searoute(origin, destination, append_orig_dest=True, restrictions=['northwest'], include_ports=True, port_params={'only_terminals':True, 'country_pol': '', 'country_pod' :'', 'country_restricted': False})
-# > Returns a GeoJSON LineString Feature
-# show route distance with unit
-print("{:.1f} {}".format(route.properties['length'], route.properties['units']))
-
-print(route)
-
-# Optionally, define the units for the length calculation included in the properties object.
-# Defaults to km, can be can be 'm' = meters 'mi = miles 'ft' = feets 'in' = inches 'deg' = degrees
-# 'cen' = centimeters 'rad' = radians 'naut' = nauticals 'yd' = yards
-routeMiles = sr.searoute(origin, destination, units="mi")
+route = sr.searoute(origin, destination)
