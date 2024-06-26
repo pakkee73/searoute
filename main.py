@@ -153,10 +153,14 @@ class SeaRouteCalculator:
             ttk.Label(self.input_frame, text=field[0]).grid(column=0, row=i, sticky=tk.W, padx=5, pady=2)
             if field[1] in ["entry_origin_name", "entry_destination_name"]:
                 setattr(self, field[1], ttk.Combobox(self.input_frame, values=self.port_names, width=30))
-                getattr(self, field[1]).bind('<KeyRelease>', self.update_combobox)
+                combobox = getattr(self, field[1])
+                combobox.bind('<KeyRelease>', self.update_combobox)
+                combobox.bind("<Return>", self.focus_next_widget)
             else:
                 setattr(self, field[1], ttk.Entry(self.input_frame, width=30))
-                getattr(self, field[1]).insert(0, field[2])  # 기본값 설정
+                entry = getattr(self, field[1])
+                entry.insert(0, field[2])  # 기본값 설정
+                entry.bind("<Return>", self.focus_next_widget)
             getattr(self, field[1]).grid(column=1, row=i, sticky=(tk.W, tk.E), padx=5, pady=2)
             getattr(self, field[1]).bind("<Return>", self.focus_next_widget)
 
@@ -177,12 +181,13 @@ class SeaRouteCalculator:
             ttk.Button(buttons_frame, text=text, command=command).grid(row=i//3, column=i%3, sticky=(tk.W, tk.E), padx=5, pady=2)
 
     def update_combobox(self, event):
-        value = self.normalize_port_name(event.widget.get())
-        if value:
-            data = [item for item in self.port_names if value in self.normalize_port_name(item)]
-            event.widget['values'] = data
-            if data:
-                event.widget.event_generate('<<ComboboxSelected>>')
+        widget = event.widget
+        value = widget.get().lower().replace(' ', '')
+        data = [name for name in self.port_names if value in name.lower().replace(' ', '')]
+        widget['values'] = data
+        if data:
+            widget.event_generate('<<ComboboxSelected>>')
+
 
     def calculate_route(self, event=None):
         try:
@@ -259,8 +264,8 @@ class SeaRouteCalculator:
         
         waypoint_entry = ttk.Combobox(waypoint_frame, values=self.port_names, width=30)
         waypoint_entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
-        waypoint_entry.bind("<Return>", self.on_waypoint_enter)
         waypoint_entry.bind('<KeyRelease>', self.update_combobox)
+        waypoint_entry.bind("<Return>", self.on_waypoint_enter)
         
         remove_button = ttk.Button(waypoint_frame, text="삭제", command=lambda: self.remove_waypoint(waypoint_frame, waypoint_entry))
         remove_button.pack(side=tk.RIGHT)
@@ -268,6 +273,7 @@ class SeaRouteCalculator:
         self.waypoint_entries.append(waypoint_entry)
         
         waypoint_entry.focus()
+
 
     def on_waypoint_enter(self, event):
         if event.widget.get().strip():
@@ -285,13 +291,13 @@ class SeaRouteCalculator:
         self.entry_origin_name.set('')
         self.entry_destination_name.set('')
         self.entry_speed.delete(0, tk.END)
-        self.entry_speed.insert(0, "12.50")
+        self.entry_speed.insert(0, "15")
         self.entry_mfo.delete(0, tk.END)
-        self.entry_mfo.insert(0, "21.50")
+        self.entry_mfo.insert(0, "30")
         self.entry_mgo.delete(0, tk.END)
-        self.entry_mgo.insert(0, "2.30")
+        self.entry_mgo.insert(0, "2")
         self.entry_bunker_price.delete(0, tk.END)
-        self.entry_bunker_price.insert(0, "650")
+        self.entry_bunker_price.insert(0, "500")
         for entry in self.waypoint_entries:
             entry.master.destroy()
         self.waypoint_entries.clear()
