@@ -55,8 +55,10 @@ def searoute(origin, destination, waypoints=None, units='naut', speed_knot=24, a
 
     total_length = 0
     total_duration = 0
+    total_cost = 0
     complete_route = []
     traversed_passages = []
+    route_details = []
 
     for i in range(len(waypoints) - 1):
         o_origin = tuple(waypoints[i])
@@ -77,13 +79,22 @@ def searoute(origin, destination, waypoints=None, units='naut', speed_knot=24, a
         if passages_in_segment:
             traversed_passages.extend(passages_in_segment)
 
+        route_details.append({
+            'origin': waypoints[i],
+            'destination': waypoints[i+1],
+            'length': length_segment,
+            'duration': duration_segment,
+            'passages': passages_in_segment
+        })
+
     feature = Feature(geometry=LineString(complete_route), properties={
-                      'length': total_length, 'units': units, 'duration_hours': total_duration})
+                      'length': total_length, 'units': units, 'duration_hours': total_duration, 'route_details': route_details})
 
     if return_passages:
         feature.properties['traversed_passages'] = passages.Passage.filter_valid_passages(traversed_passages)
 
     return feature
+
 
 def port_name_to_coords(port_name):
     port_name = re.sub(r'\s+', '', port_name).lower()
@@ -255,6 +266,7 @@ class SeaRouteCalculator:
 
             total_distance = 0
             total_duration = 0
+            total_cost = 0
             route_details = []
             complete_route = []
 
@@ -265,8 +277,6 @@ class SeaRouteCalculator:
                 print(f"Segment {i+1}: Origin: {origin}, Destination: {destination}")
                 
                 route = searoute(origin, destination, units='naut', speed_knot=speed_knot)
-                # route.geometry['coordinates']는 (경도, 위도) 순서일 것입니다
-                
                 distance_nm = route.properties['length']
                 duration_hours = route.properties['duration_hours']
                 duration_days = duration_hours / 24
@@ -291,11 +301,9 @@ class SeaRouteCalculator:
             self.result_text.delete('1.0', tk.END)
             self.result_text.insert(tk.END, result_text)
 
-            # 디버깅 정보
             print(f"Waypoints: {waypoints}")
             print(f"Complete route: {complete_route}")
 
-            # 지도 생성
             create_map(complete_route, normalized_waypoints)
         except Exception as e:
             error_message = f"오류 발생: {str(e)}\n"
