@@ -6,6 +6,9 @@ from tkinter import ttk
 import re
 import traceback
 import json
+import folium
+import webbrowser
+
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -15,6 +18,7 @@ from geojson import Feature, LineString
 from functools import lru_cache
 from copy import copy
 from searoute.data.ports_dict import node_list
+from folium.plugins import MarkerCluster
 
 @lru_cache(maxsize=None)
 def setup_P():
@@ -85,8 +89,46 @@ def port_name_to_coords(port_name):
     port_name = re.sub(r'\s+', '', port_name).lower()
     for coords, port_info in node_list.items():
         if port_info['name'].replace(' ', '').lower() == port_name:
-            return coords
+            return coords  # (경도, 위도) 순서로 반환
     raise ValueError(f"항구 이름을 찾을 수 없습니다: {port_name}")
+
+def create_map(route, waypoints):
+    # route의 좌표는 (경도, 위도) 순서입니다
+    lats = [point[1] for point in route]
+    lons = [point[0] for point in route]
+    center_lat = sum(lats) / len(lats)
+    center_lon = sum(lons) / len(lons)
+
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=3)
+
+    # 실제 해상 경로를 지도에 표시 (위도, 경도 순서로 변환)
+    folium.PolyLine([(lat, lon) for lon, lat in route], color="blue", weight=2.5, opacity=1).add_to(m)
+
+    # 출발지, 경유지, 도착지 좌표
+    waypoint_coords = [port_name_to_coords(port) for port in waypoints]
+
+    # 출발지, 경유지, 도착지에 마커와 이름 표시
+    for i, (point, name) in enumerate(zip(waypoint_coords, waypoints)):
+        color = 'green' if i == 0 else 'red' if i == len(waypoint_coords) - 1 else 'blue'
+        folium.Marker(
+            location=(point[1], point[0]),  # 위도, 경도 순서로 변경
+            popup=name,
+            icon=folium.Icon(color=color)
+        ).add_to(m)
+        folium.Tooltip(name).add_to(
+            folium.CircleMarker(
+                (point[1], point[0]),  # 위도, 경도 순서로 변경
+                radius=5,
+                color=color,
+                fill=True,
+                fillColor=color
+            ).add_to(m)
+        )
+
+    map_file = 'route_map.html'
+    m.save(map_file)
+    webbrowser.open(map_file)
+
 
 class SeaRouteCalculator:
     def __init__(self, master):
@@ -143,10 +185,10 @@ class SeaRouteCalculator:
         fields = [
             ("출발지 항구 이름", "entry_origin_name"),
             ("도착지 항구 이름", "entry_destination_name"),
-            ("선박 속도 (Knot)", "entry_speed", "15"),
-            ("MFO 소모량 (톤/일)", "entry_mfo", "30"),
-            ("MGO 소모량 (톤/일)", "entry_mgo", "2"),
-            ("Bunker 가격 ($/톤)", "entry_bunker_price", "500")
+            ("선박 속도 (Knot)", "entry_speed", "12.50"),
+            ("MFO 소모량 (톤/일)", "entry_mfo", "21.50"),
+            ("MGO 소모량 (톤/일)", "entry_mgo", "2.3"),
+            ("Bunker 가격 ($/톤)", "entry_bunker_price", "650")
         ]
 
         for i, field in enumerate(fields):
@@ -189,10 +231,12 @@ class SeaRouteCalculator:
             widget.event_generate('<<ComboboxSelected>>')
 
 
+
     def calculate_route(self, event=None):
         try:
-            waypoints = [self.entry_origin_name.get(), self.entry_destination_name.get()]
+            waypoints = [self.entry_origin_name.get()]
             waypoints += [entry.get() for entry in self.waypoint_entries if entry.get()]
+            waypoints.append(self.entry_destination_name.get())
             
             if len(waypoints) < 2:
                 raise ValueError("최소한 출발지와 도착지를 입력해야 합니다.")
@@ -212,6 +256,7 @@ class SeaRouteCalculator:
             total_distance = 0
             total_duration = 0
             route_details = []
+            complete_route = []
 
             for i in range(len(normalized_waypoints) - 1):
                 origin = port_name_to_coords(normalized_waypoints[i])
@@ -220,6 +265,7 @@ class SeaRouteCalculator:
                 print(f"Segment {i+1}: Origin: {origin}, Destination: {destination}")
                 
                 route = searoute(origin, destination, units='naut', speed_knot=speed_knot)
+                # route.geometry['coordinates']는 (경도, 위도) 순서일 것입니다
                 
                 distance_nm = route.properties['length']
                 duration_hours = route.properties['duration_hours']
@@ -229,6 +275,7 @@ class SeaRouteCalculator:
                 total_duration += duration_hours
                 
                 route_details.append(f"{normalized_waypoints[i]} → {normalized_waypoints[i+1]}: {distance_nm:.1f} n.miles, {duration_days:.2f} days")
+                complete_route.extend(route.geometry['coordinates'])
 
             total_duration_days = total_duration / 24
             mfo_cost = mfo_consumption * total_duration_days * bunker_price
@@ -243,12 +290,21 @@ class SeaRouteCalculator:
 
             self.result_text.delete('1.0', tk.END)
             self.result_text.insert(tk.END, result_text)
+
+            # 디버깅 정보
+            print(f"Waypoints: {waypoints}")
+            print(f"Complete route: {complete_route}")
+
+            # 지도 생성
+            create_map(complete_route, normalized_waypoints)
         except Exception as e:
             error_message = f"오류 발생: {str(e)}\n"
             error_message += f"오류 타입: {type(e).__name__}\n"
             error_message += f"오류 위치:\n{traceback.format_exc()}"
             messagebox.showerror("오류", error_message)
             print(error_message)
+
+
 
     def on_closing(self):
         if messagebox.askokcancel("종료", "프로그램을 종료하시겠습니까?"):
@@ -291,13 +347,13 @@ class SeaRouteCalculator:
         self.entry_origin_name.set('')
         self.entry_destination_name.set('')
         self.entry_speed.delete(0, tk.END)
-        self.entry_speed.insert(0, "15")
+        self.entry_speed.insert(0, "12.50")
         self.entry_mfo.delete(0, tk.END)
-        self.entry_mfo.insert(0, "30")
+        self.entry_mfo.insert(0, "21.50")
         self.entry_mgo.delete(0, tk.END)
-        self.entry_mgo.insert(0, "2")
+        self.entry_mgo.insert(0, "2.3")
         self.entry_bunker_price.delete(0, tk.END)
-        self.entry_bunker_price.insert(0, "500")
+        self.entry_bunker_price.insert(0, "650")
         for entry in self.waypoint_entries:
             entry.master.destroy()
         self.waypoint_entries.clear()
